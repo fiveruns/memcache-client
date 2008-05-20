@@ -1,19 +1,24 @@
 # vim: syntax=Ruby
+require 'rubygems'
+require 'rake/rdoctask'
+require 'spec/rake/spectask'
 
-require 'hoe'
-
-$:.unshift 'lib'
-require 'memcache'
-
-hoe = Hoe.new 'memcache-client', MemCache::VERSION do |p|
-  p.summary = 'A Ruby memcached client'
-  p.description = p.paragraphs_of('README.txt', 8).first
-  p.author = ['Eric Hodel', 'Robert Cottrell', 'FiveRuns']
-  p.email = 'mike@fiveruns.com'
-  p.url = p.paragraphs_of('README.txt', 6).first
-  p.changes = File.read('History.txt').scan(/\A(=.*?)^=/m).first.first
-
-  p.rubyforge_name = 'seattlerb'
-  p.extra_deps << ['ZenTest', '>= 3.4.2']
+task :gem do
+	sh "gem build memcache-client.gemspec"
 end
 
+task :install => [:gem] do
+	sh "sudo gem install memcache-client-*.gem"
+end
+
+Spec::Rake::SpecTask.new do |t|
+	t.ruby_opts = ['-rtest/unit']
+	t.spec_files = FileList['test/test_*.rb']
+	t.fail_on_error = true
+end
+  
+Rake::RDocTask.new do |rd|
+	rd.main = "README.rdoc"
+	rd.rdoc_files.include("README.rdoc", "lib/**/*.rb")
+	rd.rdoc_dir = 'doc'
+end
