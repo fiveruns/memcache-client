@@ -304,7 +304,15 @@ class MemCache
       @mutex.lock if @multithread
       socket.write command
       result = socket.gets
-      raise MemCacheError, $1.strip if result =~ /^SERVER_ERROR (.*)/
+			if result.nil?
+        server.close
+        raise MemCacheError, "lost connection to #{server.host}:#{server.port}"
+      end
+
+			if result =~ /^SERVER_ERROR (.*)/
+        server.close
+        raise MemCacheError, $1.strip
+			end
     rescue SocketError, SystemCallError, IOError => err
       server.close
       raise MemCacheError, err.message
