@@ -1,0 +1,68 @@
+= 1.5.0
+
+* Add MemCache#flush_all command.  Patch #13019 and bug #10503.  Patches
+  submitted by Sebastian Delmont and Rick Olson.
+* Type-cast data returned by MemCache#stats.  Patch #10505 submitted by
+  Sebastian Delmont.
+
+= 1.4.0
+
+* Fix bug #10371, #set does not check response for server errors.
+  Submitted by Ben VandenBos.
+* Fix bug #12450, set TCP_NODELAY socket option.  Patch by Chris
+  McGrath.
+* Fix bug #10704, missing #add method.  Patch by Jamie Macey.
+* Fix bug #10371, handle socket EOF in cache_get.  Submitted by Ben
+  VandenBos.
+
+= 1.3.0
+
+* Apply patch #6507, add stats command.  Submitted by Tyler Kovacs.
+* Apply patch #6509, parallel implementation of #get_multi.  Submitted
+  by Tyler Kovacs.
+* Validate keys.  Disallow spaces in keys or keys that are too long.
+* Perform more validation of server responses.  MemCache now reports
+  errors if the socket was not in an expected state.  (Please file
+  bugs if you find some.)
+* Add #incr and #decr.
+* Add raw argument to #set and #get to retrieve #incr and #decr
+  values.
+* Also put on MemCacheError when using Cache::get with block.
+* memcache.rb no longer sets $TESTING to a true value if it was
+  previously defined.  Bug #8213 by Matijs van Zuijlen.
+
+= 1.2.1
+
+* Fix bug #7048, MemCache#servers= referenced changed local variable.
+  Submitted by Justin Dossey.
+* Fix bug #7049, MemCache#initialize resets @buckets.  Submitted by
+  Justin Dossey.
+* Fix bug #6232, Make Cache::Get work with a block only when nil is
+  returned.  Submitted by Jon Evans.
+* Moved to the seattlerb project.
+
+= 1.2.0
+
+NOTE: This version will store keys in different places than previous
+versions!  Be prepared for some thrashing while memcached sorts itself
+out!
+
+* Fixed multithreaded operations, bug 5994 and 5989.
+  Thanks to Blaine Cook, Erik Hetzner, Elliot Smith, Dave Myron (and
+  possibly others I have forgotten).
+* Made memcached interoperable with other memcached libraries, bug
+  4509.  Thanks to anonymous.
+* Added get_multi to match Perl/etc APIs
+
+= 1.1.0
+
+* Added some tests
+* Sped up non-multithreaded and multithreaded operation
+* More Ruby-memcache compatibility
+* More RDoc
+* Switched to Hoe
+
+= 1.0.0
+
+Birthday!
+
