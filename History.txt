@@ -1,3 +1,8 @@
+= 1.5.0.1 (FiveRuns fork)
+
+* Fix set not handling client disconnects.
+http://dev.twitter.com/2008/02/solving-case-of-missing-updates.html
+
 = 1.5.0
 
 * Add MemCache#flush_all command.  Patch #13019 and bug #10503.  Patches
