@@ -328,7 +328,7 @@ class TestMemCache < Test::Unit::TestCase
       @cache.get 'key'
     end
 
-    assert_equal 'No connection to server', e.message
+    assert_match /^No connection to server/, e.message
   end
 
   def test_get_no_servers

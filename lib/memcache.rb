@@ -186,9 +186,9 @@ class MemCache
 
   def decr(key, amount = 1)
     raise MemCacheError, "Update of readonly cache" if @readonly
-    server, cache_key = request_setup key
-
-    cache_decr server, cache_key, amount
+    with_server(key) do |server, cache_key|
+      cache_decr server, cache_key, amount
+    end
   rescue TypeError => err
     handle_error server, err
   end
@@ -198,15 +198,12 @@ class MemCache
   # unmarshalled.
 
   def get(key, raw = false)
-    server, cache_key = request_setup key
-
-    value = cache_get server, cache_key
-
-    return nil if value.nil?
-
-    value = Marshal.load value unless raw
-
-    return value
+    with_server(key) do |server, cache_key|
+      value = cache_get server, cache_key
+      return nil if value.nil?
+      value = Marshal.load value unless raw
+      return value
+    end
   rescue TypeError => err
     handle_error server, err
   end
@@ -264,9 +261,9 @@ class MemCache
 
   def incr(key, amount = 1)
     raise MemCacheError, "Update of readonly cache" if @readonly
-    server, cache_key = request_setup key
-
-    cache_incr server, cache_key, amount
+    with_server(key) do |server, cache_key|
+      cache_incr server, cache_key, amount
+    end
   rescue TypeError => err
     handle_error server, err
   end
@@ -280,24 +277,24 @@ class MemCache
 
   def set(key, value, expiry = 0, raw = false)
     raise MemCacheError, "Update of readonly cache" if @readonly
-    server, cache_key = request_setup key
-    socket = server.socket
+    with_server(key) do |server, cache_key|
 
-    value = Marshal.dump value unless raw
-    command = "set #{cache_key} 0 #{expiry} #{value.size}\r\n#{value}\r\n"
+      value = Marshal.dump value unless raw
+      command = "set #{cache_key} 0 #{expiry} #{value.to_s.size}\r\n#{value}\r\n"
 
-    with_socket_management(server) do |socket|
-      socket.write command
-      result = socket.gets
-			if result.nil?
-        server.close
-        raise MemCacheError, "lost connection to #{server.host}:#{server.port}"
+      with_socket_management(server) do |socket|
+        socket.write command
+        result = socket.gets
+  			if result.nil?
+          server.close
+          raise MemCacheError, "lost connection to #{server.host}:#{server.port}"
+        end
+
+  			if result =~ /^SERVER_ERROR (.*)/
+          server.close
+          raise MemCacheError, $1.strip
+  			end
       end
-
-			if result =~ /^SERVER_ERROR (.*)/
-        server.close
-        raise MemCacheError, $1.strip
-			end
     end
   end
 
@@ -311,17 +308,17 @@ class MemCache
 
   def add(key, value, expiry = 0, raw = false)
     raise MemCacheError, "Update of readonly cache" if @readonly
-    server, cache_key = request_setup key
+    with_server(key) do |server, cache_key|
+      value = Marshal.dump value unless raw
+      command = "add #{cache_key} 0 #{expiry} #{value.size}\r\n#{value}\r\n"
 
-    value = Marshal.dump value unless raw
-    command = "add #{cache_key} 0 #{expiry} #{value.size}\r\n#{value}\r\n"
-
-    with_socket_management(server) do |socket|
-      socket.write command
-      socket.gets
+      with_socket_management(server) do |socket|
+        socket.write command
+        socket.gets
+      end
     end
   end
-
+  
   ##
   # Removes +key+ from the cache in +expiry+ seconds.
 
@@ -401,6 +398,7 @@ class MemCache
     server_stats = {}
 
     @servers.each do |server|
+      next unless server.alive?
       with_socket_management(server) do |socket|
         value = nil # TODO: why is this line here?
         socket.write "stats\r\n"
@@ -584,7 +582,9 @@ class MemCache
     retried = false
     begin
       socket = server.socket
-      raise MemCacheError, "No connection to server (#{server.status})" if socket.nil?
+      # Raise an IndexError to show this server is out of whack.
+      # We'll catch it in higher-level code and attempt to restart the operation.
+      raise IndexError, "No connection to server (#{server.status})" if socket.nil?
       block.call(socket)
     rescue MemCacheError, SocketError, SystemCallError, IOError => err
       handle_error(server, err) if retried || socket.nil?
@@ -593,6 +593,21 @@ class MemCache
     end
   ensure
     @mutex.unlock if @multithread
+  end
+
+  def with_server(key)
+    retried = false
+    begin
+      server, cache_key = request_setup(key)
+      yield server, cache_key
+    rescue IndexError => e
+      if !retried && @servers.size > 1
+        puts "Connection to server #{server.inspect} DIED!  Retrying operation..."
+        retried = true
+        retry
+      end
+      handle_error(nil, e)
+    end
   end
 
   ##

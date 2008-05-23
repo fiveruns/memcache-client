@@ -1,3 +1,11 @@
+= 1.5.0.2 (FiveRuns fork)
+
+* Add support for seamless failover between servers.  If one server connection dies,
+the client will retry the operation on another server before giving up.
+
+* Merge Will Bryant's socket retry patch.
+http://willbryant.net/software/2007/12/21/ruby-memcache-client-reconnect-and-retry
+
 = 1.5.0.1 (FiveRuns fork)
 
 * Fix set not handling client disconnects.
