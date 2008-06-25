@@ -52,3 +52,13 @@ use with Rails.  To use it be sure to assign your memcache connection to
 CACHE.  Cache returns nil on all memcache errors so you don't have to rescue
 the errors yourself.  It has #get, #put and #delete module functions.
 
+=== Improving Performance ===
+
+Performing the CRC-32 ITU-T step to determine which server to use for a given key
+is VERY slow in Ruby. You can get significant performance improvement by compiling 
+the C extension:
+
+  $ cd lib
+  $ ruby extconf.rb
+  $ make
+
