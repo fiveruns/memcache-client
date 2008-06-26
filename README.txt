@@ -1,26 +1,21 @@
 = memcache-client
 
+This is the FiveRuns fork of seattle.rb's memcache-client 1.5.0.  We've fixed several bugs
+which are in that version.
+
 Rubyforge Project:
 
 http://rubyforge.org/projects/seattlerb
-
-File bugs:
-
-http://rubyforge.org/tracker/?func=add&group_id=1513&atid=5921
 
 Documentation:
 
 http://seattlerb.org/memcache-client
 
-== About
-
-memcache-client is a client for Danga Interactive's memcached.
-
 == Installing memcache-client
 
 Just install the gem:
 
-  $ sudo gem install memcache-client
+  $ sudo gem install fiveruns-memcache-client --source http://gems.github.com
 
 == Using memcache-client
 
@@ -55,10 +50,5 @@ the errors yourself.  It has #get, #put and #delete module functions.
 === Improving Performance ===
 
 Performing the CRC-32 ITU-T step to determine which server to use for a given key
-is VERY slow in Ruby. You can get significant performance improvement by compiling 
-the C extension:
-
-  $ cd lib
-  $ ruby extconf.rb
-  $ make
-
+is VERY slow in Ruby.  RubyGems should compile a native library for performing this
+operation when the gem is installed.
