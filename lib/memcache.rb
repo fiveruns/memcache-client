@@ -10,12 +10,12 @@ class String
   ##
   # Uses the ITU-T polynomial in the CRC32 algorithm.
   begin
-    require File.dirname(__FILE__) + '/crc32'
+    require 'crc32'
     def crc32_ITU_T
       CRC32.itu_t(self)
     end
-  rescue LoadError
-    puts 'Loading with slow CRC32 ITU-T implementation.'
+  rescue LoadError => e
+    puts "Loading with slow CRC32 ITU-T implementation: #{e.message}"
     
     def crc32_ITU_T
       n = length

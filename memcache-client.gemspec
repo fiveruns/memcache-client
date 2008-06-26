@@ -1,11 +1,12 @@
 Gem::Specification.new do |s|
 	s.name = 'fiveruns-memcache-client'
-	s.version = '1.5.0.2'
+	s.version = '1.5.0.3'
 	s.authors = ['Eric Hodel', 'Robert Cottrell', 'Mike Perham']
 	s.email = 'mike@fiveruns.com'
 	s.homepage = 'http://github.com/fiveruns/memcache-client'
 	s.summary = 'A Ruby-based memcached client library'
 	s.description = s.summary
+	s.extensions << 'ext/crc32/extconf.rb'
 
 	s.require_path = 'lib'
 
