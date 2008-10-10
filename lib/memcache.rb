@@ -213,7 +213,7 @@ class MemCache
       return value
     end
   rescue TypeError => err
-    handle_error server, err
+    handle_error nil, err
   end
 
   ##
