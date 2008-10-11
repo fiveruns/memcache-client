@@ -198,7 +198,7 @@ class MemCache
       cache_decr server, cache_key, amount
     end
   rescue TypeError => err
-    handle_error server, err
+    handle_error nil, err
   end
 
   ##
@@ -259,7 +259,7 @@ class MemCache
 
     return results
   rescue TypeError => err
-    handle_error server, err
+    handle_error nil, err
   end
 
   ##
@@ -273,7 +273,7 @@ class MemCache
       cache_incr server, cache_key, amount
     end
   rescue TypeError => err
-    handle_error server, err
+    handle_error nil, err
   end
   
   ##
