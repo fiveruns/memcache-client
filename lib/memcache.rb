@@ -22,7 +22,7 @@ class String
       r = 0xFFFFFFFF
 
       n.times do |i|
-        r ^= self[i]
+        r ^= respond_to?(:bytes) ? self[i].bytes.first : self[i]
         8.times do
           if (r & 1) != 0 then
             r = (r>>1) ^ 0xEDB88320
@@ -100,7 +100,7 @@ class MemCache
   # Valid options for +opts+ are:
   #
   #   [:namespace]   Prepends this value to all keys added or retrieved.
-  #   [:readonly]    Raises an exeception on cache writes when true.
+  #   [:readonly]    Raises an exception on cache writes when true.
   #   [:multithread] Wraps cache access in a Mutex for thread safety.
   #
   # Other options are ignored.
@@ -163,7 +163,7 @@ class MemCache
 
   def servers=(servers)
     # Create the server objects.
-    @servers = servers.collect do |server|
+    @servers = Array(servers).collect do |server|
       case server
       when String
         host, port, weight = server.split ':', 3
@@ -249,9 +249,9 @@ class MemCache
 
     results = {}
 
-    server_keys.each do |server, keys|
-      keys = keys.join ' '
-      values = cache_get_multi server, keys
+    server_keys.each do |server, keys_for_server|
+      keys_for_server = keys_for_server.join ' '
+      values = cache_get_multi server, keys_for_server
       values.each do |key, value|
         results[cache_keys[key]] = Marshal.load value
       end
