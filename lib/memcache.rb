@@ -258,7 +258,7 @@ class MemCache
     end
 
     return results
-  rescue TypeError => err
+  rescue TypeError, IndexError => err
     handle_error nil, err
   end
 
@@ -333,13 +333,13 @@ class MemCache
 
   def delete(key, expiry = 0)
     raise MemCacheError, "Update of readonly cache" if @readonly
-    server, cache_key = request_setup key
-
-    with_socket_management(server) do |socket|
-      socket.write "delete #{cache_key} #{expiry}\r\n"
-      result = socket.gets
-      raise_on_error_response! result
-      result
+    with_server(key) do |server, cache_key|
+      with_socket_management(server) do |socket|
+        socket.write "delete #{cache_key} #{expiry}\r\n"
+        result = socket.gets
+        raise_on_error_response! result
+        result
+      end
     end
   end
 
@@ -349,6 +349,7 @@ class MemCache
   def flush_all
     raise MemCacheError, 'No active servers' unless active?
     raise MemCacheError, "Update of readonly cache" if @readonly
+
     begin
       @mutex.lock if @multithread
       @servers.each do |server|
@@ -359,6 +360,8 @@ class MemCache
           result
         end
       end
+    rescue IndexError => err
+      handle_error nil, err
     ensure
       @mutex.unlock if @multithread
     end
@@ -441,6 +444,7 @@ class MemCache
       end
     end
 
+    raise MemCacheError, "No active servers" if server_stats.empty?
     server_stats
   end
 
@@ -585,24 +589,28 @@ class MemCache
 
   ##
   # Gets or creates a socket connected to the given server, and yields it
-  # to the block.  If a socket error (SocketError, SystemCallError, IOError)
-  # or protocol error (MemCacheError) is raised by the block, closes the
-  # socket, attempts to connect again, and retries the block (once).  If
-  # an error is again raised, reraises it as MemCacheError.
+  # to the block, wrapped in a mutex synchronization if @multithread is true.
+  #
+  # If a socket error (SocketError, SystemCallError, IOError) or protocol error
+  # (MemCacheError) is raised by the block, closes the socket, attempts to
+  # connect again, and retries the block (once).  If an error is again raised,
+  # reraises it as MemCacheError.
+  #
   # If unable to connect to the server (or if in the reconnect wait period),
-  # raises MemCacheError - note that the socket connect code marks a server
+  # raises MemCacheError.  Note that the socket connect code marks a server
   # dead for a timeout period, so retrying does not apply to connection attempt
   # failures (but does still apply to unexpectedly lost connections etc.).
-  # Wraps the whole lot in mutex synchronization if @multithread is true.
 
   def with_socket_management(server, &block)
     @mutex.lock if @multithread
     retried = false
     begin
       socket = server.socket
-      # Raise an IndexError to show this server is out of whack.
-      # We'll catch it in higher-level code and attempt to restart the operation.
+
+      # Raise an IndexError to show this server is out of whack. If were inside
+      # a with_server block, we'll catch it and attempt to restart the operation.
       raise IndexError, "No connection to server (#{server.status})" if socket.nil?
+
       block.call(socket)
     rescue MemCacheError, SocketError, SystemCallError, IOError => err
       handle_error(server, err) if retried || socket.nil?
@@ -620,7 +628,7 @@ class MemCache
       yield server, cache_key
     rescue IndexError => e
       if !retried && @servers.size > 1
-        puts "Connection to server #{server.inspect} DIED!  Retrying operation..."
+        puts "Connection to server #{server.inspect} DIED! Retrying operation..."
         retried = true
         retry
       end
@@ -651,7 +659,7 @@ class MemCache
   end
 
   def raise_on_error_response!(response)
-    if response =~ /\A(?:CLIENT_|SERVER_)?ERROR (.*)/
+    if response =~ /\A(?:CLIENT_|SERVER_)?ERROR(.*)/
       raise MemCacheError, $1.strip
     end
   end
