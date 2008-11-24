@@ -1,3 +1,11 @@
+= 1.5.0.4
+
+* Get test suite working again (packagethief)
+* Ruby 1.9 compatiblity fixes (packagethief, mperham)
+* Consistently return server responses and check for errors (packagethief)
+* Properly calculate CRC in Ruby 1.9 strings (mperham)
+* Drop rspec in favor of test/unit, for 1.9 compat (mperham)
+
 = 1.5.0.3 (FiveRuns fork)
 
 * Integrated ITU-T CRC32 operation in native C extension for speed.  Thanks to Justin Balthrop!

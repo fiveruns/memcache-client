@@ -18,11 +18,10 @@ class String
     puts "Loading with slow CRC32 ITU-T implementation: #{e.message}"
     
     def crc32_ITU_T
-      n = length
       r = 0xFFFFFFFF
 
-      n.times do |i|
-        r ^= respond_to?(:bytes) ? self[i].bytes.first : self[i]
+      each_byte do |i|
+        r ^= i
         8.times do
           if (r & 1) != 0 then
             r = (r>>1) ^ 0xEDB88320
@@ -488,7 +487,7 @@ class MemCache
     hkey = hash_for key
 
     20.times do |try|
-      server = @buckets[hkey % @buckets.nitems]
+      server = @buckets[hkey % @buckets.compact.size]
       return server if server.alive?
       hkey += hash_for "#{try}#{key}"
     end

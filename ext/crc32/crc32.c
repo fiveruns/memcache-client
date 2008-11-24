@@ -3,8 +3,18 @@
 
 static VALUE t_itu_t(VALUE self, VALUE string) {
   VALUE str = StringValue(string);
+#ifdef RSTRING_LEN
+  int   n = RSTRING_LEN(str);
+#else
   int   n = RSTRING(str)->len;
+#endif
+
+#ifdef RSTRING_PTR
+  char* p = RSTRING_PTR(str);
+#else
   char* p = RSTRING(str)->ptr;
+#endif
+
   unsigned long r = 0xFFFFFFFF;
   int i, j;
 

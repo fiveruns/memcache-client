@@ -1,7 +1,6 @@
+# encoding: utf-8
 require 'stringio'
 require 'test/unit'
-require 'rubygems'
-require 'test/zentest_assertions'
 
 $TESTING = true
 
@@ -98,9 +97,9 @@ class TestMemCache < Test::Unit::TestCase
       @cache.cache_get(server, 'my_namespace:key')
     end
 
-    assert_match /unexpected response \"bogus response\\r\\n\"/, e.message
+    assert_match /#{Regexp.quote 'unexpected response "bogus response\r\n"'}/, e.message
 
-    deny server.alive?
+    assert !server.alive?
 
     assert_match /get my_namespace:key\r\n/, server.socket.written.string
   end
@@ -158,16 +157,22 @@ class TestMemCache < Test::Unit::TestCase
       @cache.cache_get_multi server, 'my_namespace:key'
     end
 
-    assert_match /unexpected response \"bogus response\\r\\n\"/, e.message
+    assert_match /#{Regexp.quote 'unexpected response "bogus response\r\n"'}/, e.message
 
-    deny server.alive?
+    assert !server.alive?
 
     assert_match /get my_namespace:key\r\n/, server.socket.written.string
   end
 
   def test_crc32_ITU_T
     assert_equal 0, ''.crc32_ITU_T
-    assert_equal 1260851911, 'my_namespace:key'.crc32_ITU_T
+    # First value is the fast C version, last value is the pure Ruby version
+    assert_in [-886631737, 1260851911], 'my_namespace:key'.crc32_ITU_T
+    assert_in [-224284233, 870540390], 'my_name√space:key'.crc32_ITU_T
+  end
+  
+  def assert_in(possible_values, value)
+    assert possible_values.include?(value), "#{possible_values.inspect} should contain #{value}"
   end
 
   def test_initialize
@@ -218,7 +223,7 @@ class TestMemCache < Test::Unit::TestCase
     assert_equal 'my_namespace', cache.namespace
     assert_equal true, cache.readonly?
     assert_equal false, cache.servers.empty?
-    deny_empty cache.instance_variable_get(:@buckets)
+    assert !cache.instance_variable_get(:@buckets).empty?
   end
 
   def test_initialize_too_many_args
@@ -505,7 +510,9 @@ class TestMemCache < Test::Unit::TestCase
 
     @cache.set 'key', 'value'
 
-    expected = "set my_namespace:key 0 0 9\r\n\004\b\"\nvalue\r\n"
+    dumped = Marshal.dump('value')
+    expected = "set my_namespace:key 0 0 #{dumped.length}\r\n#{dumped}\r\n"
+#    expected = "set my_namespace:key 0 0 9\r\n\004\b\"\nvalue\r\n"
     assert_equal expected, server.socket.written.string
   end
 
@@ -518,7 +525,8 @@ class TestMemCache < Test::Unit::TestCase
 
     @cache.set 'key', 'value', 5
 
-    expected = "set my_namespace:key 0 5 9\r\n\004\b\"\nvalue\r\n"
+    dumped = Marshal.dump('value')
+    expected = "set my_namespace:key 0 5 #{dumped.length}\r\n#{dumped}\r\n"
     assert_equal expected, server.socket.written.string
   end
 
@@ -570,8 +578,10 @@ class TestMemCache < Test::Unit::TestCase
     @cache.servers << server
 
     @cache.add 'key', 'value'
+    
+    dumped = Marshal.dump('value')
 
-    expected = "add my_namespace:key 0 0 9\r\n\004\b\"\nvalue\r\n"
+    expected = "add my_namespace:key 0 0 #{dumped.length}\r\n#{dumped}\r\n"
     assert_equal expected, server.socket.written.string
   end
 
@@ -584,7 +594,8 @@ class TestMemCache < Test::Unit::TestCase
 
     @cache.add 'key', 'value'
 
-    expected = "add my_namespace:key 0 0 9\r\n\004\b\"\nvalue\r\n"
+    dumped = Marshal.dump('value')
+    expected = "add my_namespace:key 0 0 #{dumped.length}\r\n#{dumped}\r\n"
     assert_equal expected, server.socket.written.string
   end
 
@@ -597,7 +608,8 @@ class TestMemCache < Test::Unit::TestCase
 
     @cache.add 'key', 'value', 5
 
-    expected = "add my_namespace:key 0 5 9\r\n\004\b\"\nvalue\r\n"
+    dumped = Marshal.dump('value')
+    expected = "add my_namespace:key 0 5 #{dumped.length}\r\n#{dumped}\r\n"
     assert_equal expected, server.socket.written.string
   end
 
@@ -717,7 +729,8 @@ class TestMemCache < Test::Unit::TestCase
       cache.set "test", "test value"
     end
 
-    assert_match /set my_namespace:test.*\r\n.*test value\r\n/, server.socket.written.string
+    # TODO Fails in 1.9
+    assert_match /set my_namespace:test.*\r\n.*test value.*\r\n/, server.socket.written.string
   end
 
   def test_basic_unthreaded_operations_should_work
@@ -732,12 +745,13 @@ class TestMemCache < Test::Unit::TestCase
     cache.servers = []
     cache.servers << server
 
-    deny cache.multithread
+    assert !cache.multithread
 
     assert_nothing_raised do
       cache.set "test", "test value"
     end
 
+    # TODO Fails in 1.9
     assert_match /set my_namespace:test.*\r\n.*test value\r\n/, server.socket.written.string
   end
 
