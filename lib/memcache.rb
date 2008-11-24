@@ -275,7 +275,7 @@ class MemCache
   rescue TypeError => err
     handle_error nil, err
   end
-  
+
   ##
   # Add +key+ to the cache with value +value+ that expires in +expiry+
   # seconds.  If +raw+ is true, +value+ will not be Marshalled.
@@ -293,15 +293,14 @@ class MemCache
       with_socket_management(server) do |socket|
         socket.write command
         result = socket.gets
-  			if result.nil?
+        raise_on_error_response! result
+
+        if result.nil?
           server.close
           raise MemCacheError, "lost connection to #{server.host}:#{server.port}"
         end
 
-  			if result =~ /^SERVER_ERROR (.*)/
-          server.close
-          raise MemCacheError, $1.strip
-  			end
+        result
       end
     end
   end
@@ -322,11 +321,13 @@ class MemCache
 
       with_socket_management(server) do |socket|
         socket.write command
-        socket.gets
+        result = socket.gets
+        raise_on_error_response! result
+        result
       end
     end
   end
-  
+
   ##
   # Removes +key+ from the cache in +expiry+ seconds.
 
@@ -336,7 +337,9 @@ class MemCache
 
     with_socket_management(server) do |socket|
       socket.write "delete #{cache_key} #{expiry}\r\n"
-      socket.gets
+      result = socket.gets
+      raise_on_error_response! result
+      result
     end
   end
 
@@ -352,7 +355,8 @@ class MemCache
         with_socket_management(server) do |socket|
           socket.write "flush_all\r\n"
           result = socket.gets
-          raise MemCacheError, $2.strip if result =~ /^(SERVER_)?ERROR(.*)/
+          raise_on_error_response! result
+          result
         end
       end
     ensure
@@ -407,13 +411,15 @@ class MemCache
 
     @servers.each do |server|
       next unless server.alive?
+
       with_socket_management(server) do |socket|
-        value = nil # TODO: why is this line here?
+        value = nil
         socket.write "stats\r\n"
         stats = {}
         while line = socket.gets do
+          raise_on_error_response! line
           break if line == "END\r\n"
-          if line =~ /^STAT ([\w]+) ([\w\.\:]+)/ then
+          if line =~ /\ASTAT ([\w]+) ([\w\.\:]+)/ then
             name, value = $1, $2
             stats[name] = case name
                           when 'version'
@@ -423,7 +429,7 @@ class MemCache
                             microseconds ||= 0
                             Float(seconds) + (Float(microseconds) / 1_000_000)
                           else
-                            if value =~ /^\d+$/ then
+                            if value =~ /\A\d+\Z/ then
                               value.to_i
                             else
                               value
@@ -502,6 +508,7 @@ class MemCache
     with_socket_management(server) do |socket|
       socket.write "decr #{cache_key} #{amount}\r\n"
       text = socket.gets
+      raise_on_error_response! text
       return nil if text == "NOT_FOUND\r\n"
       return text.to_i
     end
@@ -518,9 +525,10 @@ class MemCache
 
       if keyline.nil? then
         server.close
-        raise MemCacheError, "lost connection to #{server.host}:#{server.port}" # TODO: retry here too
+        raise MemCacheError, "lost connection to #{server.host}:#{server.port}"
       end
 
+      raise_on_error_response! keyline
       return nil if keyline == "END\r\n"
 
       unless keyline =~ /(\d+)\r/ then
@@ -544,8 +552,9 @@ class MemCache
 
       while keyline = socket.gets do
         return values if keyline == "END\r\n"
+        raise_on_error_response! keyline
 
-        unless keyline =~ /^VALUE (.+) (.+) (.+)/ then
+        unless keyline =~ /\AVALUE (.+) (.+) (.+)/ then
           server.close
           raise MemCacheError, "unexpected response #{keyline.inspect}"
         end
@@ -568,21 +577,22 @@ class MemCache
     with_socket_management(server) do |socket|
       socket.write "incr #{cache_key} #{amount}\r\n"
       text = socket.gets
+      raise_on_error_response! text
       return nil if text == "NOT_FOUND\r\n"
       return text.to_i
     end
   end
-  
+
   ##
   # Gets or creates a socket connected to the given server, and yields it
-  # to the block.  If a socket error (SocketError, SystemCallError, IOError) 
+  # to the block.  If a socket error (SocketError, SystemCallError, IOError)
   # or protocol error (MemCacheError) is raised by the block, closes the
   # socket, attempts to connect again, and retries the block (once).  If
   # an error is again raised, reraises it as MemCacheError.
   # If unable to connect to the server (or if in the reconnect wait period),
   # raises MemCacheError - note that the socket connect code marks a server
   # dead for a timeout period, so retrying does not apply to connection attempt
-  # failures (but does still apply to unexpectedly lost connections etc.).  
+  # failures (but does still apply to unexpectedly lost connections etc.).
   # Wraps the whole lot in mutex synchronization if @multithread is true.
 
   def with_socket_management(server, &block)
@@ -638,6 +648,12 @@ class MemCache
     cache_key = make_cache_key key
     server = get_server_for_key cache_key
     return server, cache_key
+  end
+
+  def raise_on_error_response!(response)
+    if response =~ /\A(?:CLIENT_|SERVER_)?ERROR (.*)/
+      raise MemCacheError, $1.strip
+    end
   end
 
   ##
