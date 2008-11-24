@@ -5,7 +5,7 @@ require 'test/zentest_assertions'
 
 $TESTING = true
 
-require 'memcache'
+require File.dirname(__FILE__) + '/../lib/memcache'
 
 class MemCache
 
@@ -86,7 +86,9 @@ class TestMemCache < Test::Unit::TestCase
 
   def test_cache_get_bad_state
     server = FakeServer.new
-    server.socket.data.write "bogus response\r\n"
+
+    # Write two messages to the socket to test failover
+    server.socket.data.write "bogus response\r\nbogus response\r\n"
     server.socket.data.rewind
 
     @cache.servers = []
@@ -96,12 +98,11 @@ class TestMemCache < Test::Unit::TestCase
       @cache.cache_get(server, 'my_namespace:key')
     end
 
-    assert_equal "unexpected response \"bogus response\\r\\n\"", e.message
+    assert_match /unexpected response \"bogus response\\r\\n\"/, e.message
 
     deny server.alive?
 
-    assert_equal "get my_namespace:key\r\n",
-                 server.socket.written.string
+    assert_match /get my_namespace:key\r\n/, server.socket.written.string
   end
 
   def test_cache_get_miss
@@ -145,7 +146,9 @@ class TestMemCache < Test::Unit::TestCase
 
   def test_cache_get_multi_bad_state
     server = FakeServer.new
-    server.socket.data.write "bogus response\r\n"
+
+    # Write two messages to the socket to test failover
+    server.socket.data.write "bogus response\r\nbogus response\r\n"
     server.socket.data.rewind
 
     @cache.servers = []
@@ -155,12 +158,11 @@ class TestMemCache < Test::Unit::TestCase
       @cache.cache_get_multi server, 'my_namespace:key'
     end
 
-    assert_equal "unexpected response \"bogus response\\r\\n\"", e.message
+    assert_match /unexpected response \"bogus response\\r\\n\"/, e.message
 
     deny server.alive?
 
-    assert_equal "get my_namespace:key\r\n",
-                 server.socket.written.string
+    assert_match /get my_namespace:key\r\n/, server.socket.written.string
   end
 
   def test_crc32_ITU_T
@@ -545,8 +547,11 @@ class TestMemCache < Test::Unit::TestCase
 
   def test_set_too_big
     server = FakeServer.new
-    server.socket.data.write "SERVER_ERROR object too large for cache\r\n"
+
+    # Write two messages to the socket to test failover
+    server.socket.data.write "SERVER_ERROR\r\nSERVER_ERROR object too large for cache\r\n"
     server.socket.data.rewind
+
     @cache.servers = []
     @cache.servers << server
 
@@ -554,7 +559,7 @@ class TestMemCache < Test::Unit::TestCase
       @cache.set 'key', 'v'
     end
 
-    assert_equal 'object too large for cache', e.message
+    assert_match /object too large for cache/, e.message
   end
 
   def test_add
@@ -655,11 +660,12 @@ class TestMemCache < Test::Unit::TestCase
 
   def test_flush_all_failure
     socket = FakeSocket.new
-    socket.data.write "ERROR\r\n"
+
+    # Write two messages to the socket to test failover
+    socket.data.write "ERROR\r\nERROR\r\n"
     socket.data.rewind
+
     server = FakeServer.new socket
-    def server.host() "localhost"; end
-    def server.port() 11211; end
 
     @cache.servers = []
     @cache.servers << server
@@ -668,7 +674,7 @@ class TestMemCache < Test::Unit::TestCase
       @cache.flush_all
     end
 
-    assert_equal "flush_all\r\n", socket.written.string
+    assert_match /flush_all\r\n/, socket.written.string
   end
 
   def test_stats
@@ -697,24 +703,42 @@ class TestMemCache < Test::Unit::TestCase
     cache = MemCache.new :multithread => true,
                          :namespace => 'my_namespace',
                          :readonly => false
-    server = util_setup_server cache, 'example.com', "OK\r\n"
-    cache.instance_variable_set :@servers, [server]
+
+    server = FakeServer.new
+    server.socket.data.write "STORED\r\n"
+    server.socket.data.rewind
+
+    cache.servers = []
+    cache.servers << server
+
+    assert cache.multithread
 
     assert_nothing_raised do
       cache.set "test", "test value"
     end
+
+    assert_match /set my_namespace:test.*\r\n.*test value\r\n/, server.socket.written.string
   end
 
   def test_basic_unthreaded_operations_should_work
     cache = MemCache.new :multithread => false,
                          :namespace => 'my_namespace',
                          :readonly => false
-    server = util_setup_server cache, 'example.com', "OK\r\n"
-    cache.instance_variable_set :@servers, [server]
+
+    server = FakeServer.new
+    server.socket.data.write "STORED\r\n"
+    server.socket.data.rewind
+
+    cache.servers = []
+    cache.servers << server
+
+    deny cache.multithread
 
     assert_nothing_raised do
       cache.set "test", "test value"
     end
+
+    assert_match /set my_namespace:test.*\r\n.*test value\r\n/, server.socket.written.string
   end
 
   def util_setup_fake_server
