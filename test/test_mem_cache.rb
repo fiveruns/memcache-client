@@ -164,17 +164,6 @@ class TestMemCache < Test::Unit::TestCase
     assert_match /get my_namespace:key\r\n/, server.socket.written.string
   end
 
-  def test_crc32_ITU_T
-    assert_equal 0, ''.crc32_ITU_T
-    # First value is the fast C version, last value is the pure Ruby version
-    assert_in [-886631737, 1260851911], 'my_namespace:key'.crc32_ITU_T
-    assert_in [-224284233, 870540390], 'my_name√space:key'.crc32_ITU_T
-  end
-  
-  def assert_in(possible_values, value)
-    assert possible_values.include?(value), "#{possible_values.inspect} should contain #{value}"
-  end
-
   def test_initialize
     cache = MemCache.new :namespace => 'my_namespace', :readonly => true
 
