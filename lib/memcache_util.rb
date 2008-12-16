@@ -3,7 +3,19 @@
 # methods silently ignore MemCache errors.
 
 module Cache
-
+  
+  ##
+  # Try to return a logger object that does not rely
+  # on ActiveRecord for logging.
+  def self.logger
+    @logger ||= if defined? Rails.logger # Rails 2.1 +
+      Rails.logger
+    elsif defined? RAILS_DEFAULT_LOGGER # Rails 1.2.2 +
+      RAILS_DEFAULT_LOGGER
+    else
+      ActiveRecord::Base.logger # ... very old Rails.
+    end
+  end
   ##
   # Returns the object at +key+ from the cache if successful, or nil if either
   # the object is not in the cache or if there was an error attermpting to
@@ -17,14 +29,14 @@ module Cache
     start_time = Time.now
     value = CACHE.get key
     elapsed = Time.now - start_time
-    ActiveRecord::Base.logger.debug('MemCache Get (%0.6f)  %s' % [elapsed, key])
+    logger.debug('MemCache Get (%0.6f)  %s' % [elapsed, key])
     if value.nil? and block_given? then
       value = yield
       add key, value, expiry
     end
     value
   rescue MemCache::MemCacheError => err
-    ActiveRecord::Base.logger.debug "MemCache Error: #{err.message}"
+    logger.debug "MemCache Error: #{err.message}"
     if block_given? then
       value = yield
       put key, value, expiry
@@ -40,7 +52,7 @@ module Cache
     start_time = Time.now
     CACHE.set key, value, expiry
     elapsed = Time.now - start_time
-    ActiveRecord::Base.logger.debug('MemCache Set (%0.6f)  %s' % [elapsed, key])
+    logger.debug('MemCache Set (%0.6f)  %s' % [elapsed, key])
     value
   rescue MemCache::MemCacheError => err
     ActiveRecord::Base.logger.debug "MemCache Error: #{err.message}"
@@ -55,7 +67,7 @@ module Cache
     start_time = Time.now
     response = CACHE.add key, value, expiry
     elapsed = Time.now - start_time
-    ActiveRecord::Base.logger.debug('MemCache Add (%0.6f)  %s' % [elapsed, key])
+    logger.debug('MemCache Add (%0.6f)  %s' % [elapsed, key])
     (response == "STORED\r\n") ? value : nil
   rescue MemCache::MemCacheError => err
     ActiveRecord::Base.logger.debug "MemCache Error: #{err.message}"
@@ -69,11 +81,11 @@ module Cache
     start_time = Time.now
     CACHE.delete key, delay
     elapsed = Time.now - start_time
-    ActiveRecord::Base.logger.debug('MemCache Delete (%0.6f)  %s' %
+    logger.debug('MemCache Delete (%0.6f)  %s' %
                                     [elapsed, key])
     nil
   rescue MemCache::MemCacheError => err
-    ActiveRecord::Base.logger.debug "MemCache Error: #{err.message}"
+    logger.debug "MemCache Error: #{err.message}"
     nil
   end
 
@@ -82,7 +94,7 @@ module Cache
 
   def self.reset
     CACHE.reset
-    ActiveRecord::Base.logger.debug 'MemCache Connections Reset'
+    logger.debug 'MemCache Connections Reset'
     nil
   end
 
