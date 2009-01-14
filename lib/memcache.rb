@@ -5,6 +5,7 @@ require 'thread'
 require 'timeout'
 require 'rubygems'
 require 'zlib'
+require 'digest/sha1'
 
 ##
 # A Ruby client library for memcached.
@@ -18,7 +19,7 @@ class MemCache
   ##
   # The version of MemCache you are using.
 
-  VERSION = '1.5.0.1'
+  VERSION = '1.5.0.7'
 
   ##
   # Default options for the cache object.
@@ -128,7 +129,7 @@ class MemCache
   # Set the servers that the requests will be distributed between.  Entries
   # can be either strings of the form "hostname:port" or
   # "hostname:port:weight" or MemCache::Server objects.
-
+  #
   def servers=(servers)
     # Create the server objects.
     @servers = Array(servers).collect do |server|
@@ -139,7 +140,7 @@ class MemCache
         weight ||= DEFAULT_WEIGHT
         Server.new self, host, port, weight
       when Server
-        if server.memcache.multithread != @multithread then
+        if server.multithread != @multithread then
           raise ArgumentError, "can't mix threaded and non-threaded servers"
         end
         server
@@ -148,11 +149,10 @@ class MemCache
       end
     end
 
-    # Create an array of server buckets for weight selection of servers.
-    @buckets = []
-    @servers.each do |server|
-      server.weight.times { @buckets.push(server) }
-    end
+    # There's no point in doing this if there's only one server
+    @continuum = create_continuum_for(@servers) if @servers.size > 1
+
+    @servers
   end
 
   ##
@@ -444,6 +444,14 @@ class MemCache
   end
 
   ##
+  # Returns an interoperable hash value for +key+.  (I think, docs are
+  # sketchy for down servers).
+
+  def hash_for(key)
+    Zlib.crc32(key)
+  end
+
+  ##
   # Pick a server to handle the request based on a hash of the key.
 
   def get_server_for_key(key)
@@ -453,23 +461,15 @@ class MemCache
     raise MemCacheError, "No servers available" if @servers.empty?
     return @servers.first if @servers.length == 1
 
-    hkey = hash_for key
+    hkey = hash_for(key)
 
     20.times do |try|
-      server = @buckets[hkey % @buckets.compact.size]
+      server = binary_search(@continuum, hkey) { |e| e.value }.server
       return server if server.alive?
-      hkey += hash_for "#{try}#{key}"
+      hkey = hash_for "#{try}#{key}"
     end
 
     raise MemCacheError, "No servers available"
-  end
-
-  ##
-  # Returns an interoperable hash value for +key+.  (I think, docs are
-  # sketchy for down servers).
-
-  def hash_for(key)
-    (Zlib.crc32(key) >> 16) & 0x7fff
   end
 
   ##
@@ -632,6 +632,41 @@ class MemCache
     end
   end
 
+  def create_continuum_for(servers)
+    total_weight = servers.inject(0) { |memo, srv| memo + srv.weight }
+    continuum = []
+
+    servers.each do |server|
+      entry_count_for(server, servers.size, total_weight).times do |idx|
+        hash = Digest::SHA1.hexdigest("#{server.host}:#{server.port}:#{idx}")
+        value = Integer("0x#{hash[0..7]}")
+        continuum << ContinuumEntry.new(value, server)
+      end
+    end
+
+    continuum.sort { |a, b| a.value <=> b.value }
+  end
+
+  def entry_count_for(server, total_servers, total_weight)
+    ((total_servers * ContinuumEntry::POINTS_PER_SERVER * server.weight) / Float(total_weight)).floor
+  end
+
+  class ContinuumEntry
+    POINTS_PER_SERVER = 160 # this is the default in libmemcached
+
+    attr_reader :value
+    attr_reader :server
+
+    def initialize(val, srv)
+      @value = val
+      @server = srv
+    end
+
+    def inspect
+      "<#{value}, #{server.host}:#{server.port}>"
+    end
+  end
+
   ##
   # This class represents a memcached server instance.
 
@@ -675,6 +710,8 @@ class MemCache
 
     attr_reader :status
 
+    attr_reader :multithread
+
     ##
     # Create a new MemCache::Server object for the memcached instance
     # listening on the given host and port, weighted by the given weight.
@@ -683,12 +720,11 @@ class MemCache
       raise ArgumentError, "No host specified" if host.nil? or host.empty?
       raise ArgumentError, "No port specified" if port.nil? or port.to_i.zero?
 
-      @memcache = memcache
       @host   = host
       @port   = port.to_i
       @weight = weight.to_i
 
-      @multithread = @memcache.multithread
+      @multithread = memcache.multithread
       @mutex = Mutex.new
 
       @sock   = nil
@@ -779,5 +815,26 @@ class MemCache
 
   class MemCacheError < RuntimeError; end
 
+
+  # Find the closest element in Array less than or equal to value. 
+  def binary_search(ary, value, &block)
+    upper = ary.size - 1
+    lower = 0
+    idx = 0
+
+    result = while(lower <= upper) do
+      idx = (lower + upper) / 2
+      comp = block.call(ary[idx]) <=> value
+ 
+      if comp == 0
+        break idx
+      elsif comp > 0
+        upper = idx - 1
+      else
+        lower = idx + 1
+      end
+    end
+    result ? ary[result] : ary[upper]
+  end
 end
 

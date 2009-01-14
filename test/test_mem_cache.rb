@@ -1,6 +1,8 @@
 # encoding: utf-8
 require 'stringio'
 require 'test/unit'
+require 'rubygems'
+require 'flexmock/test_unit'
 
 $TESTING = true
 
@@ -60,6 +62,30 @@ class TestMemCache < Test::Unit::TestCase
 
   def setup
     @cache = MemCache.new 'localhost:1', :namespace => 'my_namespace'
+  end
+
+  def test_consistent_hashing
+    flexmock(MemCache::Server).new_instances.should_receive(:alive?).and_return(true)
+
+    # Setup a continuum of two servers
+    @cache.servers = ['mike1', 'mike2', 'mike3']
+
+    keys = []
+    1000.times do |idx|
+      keys << idx.to_s
+    end
+
+    before_continuum = keys.map {|key| @cache.get_server_for_key(key) }
+
+    @cache.servers = ['mike1', 'mike2', 'mike3', 'mike4']
+
+    after_continuum = keys.map {|key| @cache.get_server_for_key(key) }
+
+    cdiff = before_continuum.zip(after_continuum).find_all {|a| a[0].host == a[1].host }.size
+
+    # With continuum, we should see about 75% of the keys map to the same server
+    # With modulo, we would see about 25%.
+    assert cdiff > 700
   end
 
   def test_cache_get
@@ -212,7 +238,7 @@ class TestMemCache < Test::Unit::TestCase
     assert_equal 'my_namespace', cache.namespace
     assert_equal true, cache.readonly?
     assert_equal false, cache.servers.empty?
-    assert !cache.instance_variable_get(:@buckets).empty?
+    assert !cache.instance_variable_get(:@continuum).empty?
   end
 
   def test_initialize_too_many_args
@@ -386,12 +412,15 @@ class TestMemCache < Test::Unit::TestCase
   def test_get_server_for_key_multiple
     s1 = util_setup_server @cache, 'one.example.com', ''
     s2 = util_setup_server @cache, 'two.example.com', ''
-    @cache.instance_variable_set :@servers, [s1, s2]
-    @cache.instance_variable_set :@buckets, [s1, s2]
+    @cache.servers = [s1, s2]
 
     server = @cache.get_server_for_key 'keya'
     assert_equal 'two.example.com', server.host
     server = @cache.get_server_for_key 'keyb'
+    assert_equal 'two.example.com', server.host
+    server = @cache.get_server_for_key 'keyc'
+    assert_equal 'two.example.com', server.host
+    server = @cache.get_server_for_key 'keyd'
     assert_equal 'one.example.com', server.host
   end
 
