@@ -2,7 +2,12 @@
 require 'stringio'
 require 'test/unit'
 require 'rubygems'
-require 'flexmock/test_unit'
+begin
+  gem 'flexmock'
+  require 'flexmock/test_unit'
+rescue => e
+  puts "Some tests require flexmock, please run `gem install flexmock`"
+end
 
 $TESTING = true
 
@@ -81,11 +86,11 @@ class TestMemCache < Test::Unit::TestCase
 
     after_continuum = keys.map {|key| @cache.get_server_for_key(key) }
 
-    cdiff = before_continuum.zip(after_continuum).find_all {|a| a[0].host == a[1].host }.size
+    same_count = before_continuum.zip(after_continuum).find_all {|a| a[0].host == a[1].host }.size
 
     # With continuum, we should see about 75% of the keys map to the same server
     # With modulo, we would see about 25%.
-    assert cdiff > 700
+    assert same_count > 700
   end
 
   def test_cache_get
