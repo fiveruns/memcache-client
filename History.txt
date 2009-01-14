@@ -1,3 +1,14 @@
+= Unreleased
+
+* Implement a consistent hashing algorithm, as described in libketama.
+  This dramatically reduces the cost of adding or removing servers dynamically
+  as keys are much more likely to map to the same server.
+
+  Take a scenario where we add a fourth server.  With a dumb modulo algorithm, about
+  25% of the keys will map to the same server.  In other words, 75% of your memcached
+  content suddenly becomes invalid.  With a consistent algorithm, 75% of the keys
+  will map to the same server as before - only 25% will be invalidated.
+
 = 1.5.0.5
 
 * Remove native C CRC32_ITU_T extension in favor of Zlib's crc32 method.
